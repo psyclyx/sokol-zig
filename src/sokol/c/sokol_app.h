@@ -3228,6 +3228,8 @@ _SOKOL_PRIVATE void _sapp_init_state(const sapp_desc* desc) {
     _sapp_strcpy(_sapp.desc.html5_canvas_selector, _sapp.html5_canvas_selector, sizeof(_sapp.html5_canvas_selector));
     _sapp.desc.html5_canvas_selector = _sapp.html5_canvas_selector;
     _sapp.html5_ask_leave_site = _sapp.desc.html5_ask_leave_site;
+    _sapp.macos_not_resizable = _sapp.desc.macos_not_resizable;
+    _sapp.macos_borderless = _sapp.desc.macos_borderless;
     _sapp.clipboard.enabled = _sapp.desc.enable_clipboard;
     if (_sapp.clipboard.enabled) {
         _sapp.clipboard.buf_size = _sapp.desc.clipboard_size;
