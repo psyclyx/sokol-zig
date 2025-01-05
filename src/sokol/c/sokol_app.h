@@ -1798,6 +1798,8 @@ typedef struct sapp_desc {
     // backend-specific options
     int gl_major_version;               // override GL major and minor version (the default GL version is 4.1 on macOS, 4.3 elsewhere)
     int gl_minor_version;
+    bool macos_not_resizable;           // (psyclyx/sokol) whether the macos window should be resizable
+    bool macos_borderless;              // (psyclyx/sokol) whether the macos window should be borderless
     bool win32_console_utf8;            // if true, set the output console codepage to UTF-8
     bool win32_console_create;          // if true, attach stdout/stderr to a new console window
     bool win32_console_attach;          // if true, attach stdout/stderr to parent process
@@ -2949,6 +2951,8 @@ typedef struct {
     bool event_consumed;
     bool html5_ask_leave_site;
     bool onscreen_keyboard_shown;
+    bool macos_borderless;
+    bool macos_not_resizable;
     int window_width;
     int window_height;
     int framebuffer_width;
@@ -3630,18 +3634,27 @@ _SOKOL_PRIVATE void _sapp_macos_discard_state(void) {
 + (id)_windowResizeEastWestCursor;
 @end
 
-_SOKOL_PRIVATE void _sapp_macos_init_cursors(void) {
+_SOKOL_PRIVATE void _sapp_macos_init_cursors(int resizable) {
     _sapp.macos.cursors[SAPP_MOUSECURSOR_DEFAULT] = nil; // not a bug
     _sapp.macos.cursors[SAPP_MOUSECURSOR_ARROW] = [NSCursor arrowCursor];
     _sapp.macos.cursors[SAPP_MOUSECURSOR_IBEAM] = [NSCursor IBeamCursor];
     _sapp.macos.cursors[SAPP_MOUSECURSOR_CROSSHAIR] = [NSCursor crosshairCursor];
     _sapp.macos.cursors[SAPP_MOUSECURSOR_POINTING_HAND] = [NSCursor pointingHandCursor];
-    _sapp.macos.cursors[SAPP_MOUSECURSOR_RESIZE_EW] = [NSCursor respondsToSelector:@selector(_windowResizeEastWestCursor)] ? [NSCursor _windowResizeEastWestCursor] : [NSCursor resizeLeftRightCursor];
-    _sapp.macos.cursors[SAPP_MOUSECURSOR_RESIZE_NS] = [NSCursor respondsToSelector:@selector(_windowResizeNorthSouthCursor)] ? [NSCursor _windowResizeNorthSouthCursor] : [NSCursor resizeUpDownCursor];
-    _sapp.macos.cursors[SAPP_MOUSECURSOR_RESIZE_NWSE] = [NSCursor respondsToSelector:@selector(_windowResizeNorthWestSouthEastCursor)] ? [NSCursor _windowResizeNorthWestSouthEastCursor] : [NSCursor closedHandCursor];
-    _sapp.macos.cursors[SAPP_MOUSECURSOR_RESIZE_NESW] = [NSCursor respondsToSelector:@selector(_windowResizeNorthEastSouthWestCursor)] ? [NSCursor _windowResizeNorthEastSouthWestCursor] : [NSCursor closedHandCursor];
-    _sapp.macos.cursors[SAPP_MOUSECURSOR_RESIZE_ALL] = [NSCursor closedHandCursor];
     _sapp.macos.cursors[SAPP_MOUSECURSOR_NOT_ALLOWED] = [NSCursor operationNotAllowedCursor];
+    if (resizable) {
+        _sapp.macos.cursors[SAPP_MOUSECURSOR_RESIZE_EW] = [NSCursor respondsToSelector:@selector(_windowResizeEastWestCursor)] ? [NSCursor _windowResizeEastWestCursor] : [NSCursor resizeLeftRightCursor];
+        _sapp.macos.cursors[SAPP_MOUSECURSOR_RESIZE_NS] = [NSCursor respondsToSelector:@selector(_windowResizeNorthSouthCursor)] ? [NSCursor _windowResizeNorthSouthCursor] : [NSCursor resizeUpDownCursor];
+        _sapp.macos.cursors[SAPP_MOUSECURSOR_RESIZE_NWSE] = [NSCursor respondsToSelector:@selector(_windowResizeNorthWestSouthEastCursor)] ? [NSCursor _windowResizeNorthWestSouthEastCursor] : [NSCursor closedHandCursor];
+        _sapp.macos.cursors[SAPP_MOUSECURSOR_RESIZE_NESW] = [NSCursor respondsToSelector:@selector(_windowResizeNorthEastSouthWestCursor)] ? [NSCursor _windowResizeNorthEastSouthWestCursor] : [NSCursor closedHandCursor];
+        _sapp.macos.cursors[SAPP_MOUSECURSOR_RESIZE_ALL] = [NSCursor closedHandCursor];
+    } else {
+        // todo @psyclyx: do we need to do this? could we just leave these as-is?
+        _sapp.macos.cursors[SAPP_MOUSECURSOR_RESIZE_EW] = [NSCursor arrowCursor];
+        _sapp.macos.cursors[SAPP_MOUSECURSOR_RESIZE_NS] = [NSCursor arrowCursor];
+        _sapp.macos.cursors[SAPP_MOUSECURSOR_RESIZE_NWSE] = [NSCursor arrowCursor];
+        _sapp.macos.cursors[SAPP_MOUSECURSOR_RESIZE_NESW] = [NSCursor arrowCursor];
+        _sapp.macos.cursors[SAPP_MOUSECURSOR_RESIZE_ALL] = [NSCursor arrowCursor];
+    }
 }
 
 _SOKOL_PRIVATE void _sapp_macos_run(const sapp_desc* desc) {
@@ -3949,7 +3962,7 @@ _SOKOL_PRIVATE void _sapp_macos_frame(void) {
 @implementation _sapp_macos_app_delegate
 - (void)applicationDidFinishLaunching:(NSNotification*)aNotification {
     _SOKOL_UNUSED(aNotification);
-    _sapp_macos_init_cursors();
+    _sapp_macos_init_cursors(!_sapp.macos_not_resizable);
     if ((_sapp.window_width == 0) || (_sapp.window_height == 0)) {
         // use 4/5 of screen size as default size
         NSRect screen_rect = NSScreen.mainScreen.frame;
@@ -3961,10 +3974,12 @@ _SOKOL_PRIVATE void _sapp_macos_frame(void) {
         }
     }
     const NSUInteger style =
-        NSWindowStyleMaskTitled |
-        NSWindowStyleMaskClosable |
-        NSWindowStyleMaskMiniaturizable |
-        NSWindowStyleMaskResizable;
+      (_sapp.macos_borderless ?
+       NSWindowStyleMaskBorderless
+       : (NSWindowStyleMaskTitled |
+	  NSWindowStyleMaskClosable |
+	  NSWindowStyleMaskMiniaturizable))
+      | (_sapp.macos_not_resizable ? 0 : NSWindowStyleMaskResizable);
     NSRect window_rect = NSMakeRect(0, 0, _sapp.window_width, _sapp.window_height);
     _sapp.macos.window = [[_sapp_macos_window alloc]
         initWithContentRect:window_rect
